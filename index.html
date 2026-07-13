@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0c1a20">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Breathe">
 <title>Breathe</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -35,19 +35,17 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  html,
-  body {
+  html {
     height: 100%;
-    margin: 0;
-    background:
-      radial-gradient(1100px 820px at 50% 40%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%),
-      linear-gradient(160deg, var(--bg-a), var(--bg-b) 70%);
+    background: var(--bg-b);
   }
 
   body {
     font-family: 'Instrument Sans', system-ui, -apple-system, sans-serif;
     color: var(--ink);
-    min-height: 100vh;
+    background:
+      radial-gradient(1100px 820px at 50% 40%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%),
+      linear-gradient(160deg, var(--bg-a), var(--bg-b) 70%);
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
@@ -426,7 +424,10 @@
     letter-spacing: 0.01em;
     color: var(--ink-dim);
     line-height: 1.5;
-    min-height: 62px;
+    min-height: 4.2em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: color 0.4s ease;
     z-index: 3;
   }
