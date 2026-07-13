@@ -35,7 +35,7 @@
        on small screens and prevent it from ballooning on tablets/desktop.
        At 12vw it stays well clear of the orb's gutter at every width — the
        orb itself only ever claims 54vw, leaving 23vw of gutter per side. */
-    --rail-btn: clamp(40px, 12vw, 58px);
+    --rail-btn: clamp(46px, 13.8vw, 67px);
     transition: --accent 0.9s ease, --accent2 0.9s ease;
   }
 
@@ -222,7 +222,9 @@
        text node repaints in isolation instead of jittering the whole readout */
     transform: translateX(0.05em) translateZ(0);
     backface-visibility: hidden;
+    transition: opacity 0.16s ease;
   }
+  .phase-word.fading { opacity: 0; }
   .count {
     margin-top: 8px;
     font-size: 14px;
@@ -559,9 +561,10 @@
        every phase change perfectly still regardless of text length. */
     height: calc(93px + env(safe-area-inset-bottom));
     overflow: hidden;
-    transition: color 0.4s ease;
+    transition: color 0.4s ease, opacity 0.16s ease;
     z-index: 3;
   }
+  .instruction.fading { opacity: 0; }
 
   @media (max-height: 620px) {
     :root {
@@ -709,10 +712,27 @@
   var patternEl = document.getElementById("pattern");
   var cyclesEl = document.getElementById("cycles");
 
-  function setWord(text) {
-    if (wordEl.textContent === text) return;
-    wordEl.textContent = text;
+  // Shared, subtle cross-fade for text swaps: opacity only, no movement.
+  // Guards against overlapping calls (e.g. rapid phase changes) by clearing
+  // any fade already in progress on that element before starting a new one.
+  var fadeTimers = new WeakMap();
+  function fadeText(el, text) {
+    if (el.textContent === text) return;
+    var pending = fadeTimers.get(el);
+    if (pending) clearTimeout(pending);
+    el.classList.add("fading");
+    var t = setTimeout(function () {
+      el.textContent = text;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          el.classList.remove("fading");
+        });
+      });
+    }, 160);
+    fadeTimers.set(el, t);
   }
+  function setWord(text) { fadeText(wordEl, text); }
+  function setInstruction(text) { fadeText(instrEl, text); }
   var startBtn = document.getElementById("start");
   var soundBtn = document.getElementById("sound");
   var sndLabel = document.getElementById("sndLabel");
@@ -765,12 +785,12 @@
     if (rest && !running) {
       setWord("Ready");
       setCount("");
-      instrEl.textContent = started ? "Paused. Press resume to continue." : "Get comfortable. Press start when you're ready.";
+      setInstruction(started ? "Paused. Press resume to continue." : "Get comfortable. Press start when you're ready.");
       setScale(MIN, 0);
       return;
     }
     setWord(ph.word);
-    instrEl.textContent = ph.text;
+    setInstruction(ph.text);
     if (soundOn) cue(ph.type);
   }
 
@@ -837,7 +857,7 @@
     started = false;
     setWord("Done");
     setCount("");
-    instrEl.textContent = "Session complete. Take a moment.";
+    setInstruction("Session complete. Take a moment.");
     setScale(MIN, 0);
     if (soundOn) cue("complete", true);
     setStartLabel();
@@ -921,7 +941,7 @@
       // Freeze the orb where it is; only update the text.
       setWord("Paused");
       setCount("");
-      instrEl.textContent = "Paused. Press resume to continue.";
+      setInstruction("Paused. Press resume to continue.");
     }
     setStartLabel();
   });
