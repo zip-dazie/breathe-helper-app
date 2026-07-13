@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Breathe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  @property --accent {
+    syntax: '<color>'; inherits: true; initial-value: #54d1c4;
+  }
+  @property --accent2 {
+    syntax: '<color>'; inherits: true; initial-value: #2fa8b8;
+  }
+
+  :root {
+    --accent: #54d1c4;
+    --accent2: #2fa8b8;
+    --bg-a: #0c1a20;
+    --bg-b: #070d12;
+    --ink: #e7eef0;
+    --ink-dim: rgba(231, 238, 240, 0.55);
+    --ink-faint: rgba(231, 238, 240, 0.30);
+    --line: rgba(231, 238, 240, 0.10);
+    --orb: clamp(170px, 54vw, 300px);
+    transition: --accent 0.9s ease, --accent2 0.9s ease;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(1100px 820px at 50% 40%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%),
+      linear-gradient(160deg, var(--bg-a), var(--bg-b) 70%);
+    background-attachment: fixed;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    transition: --accent 0.9s ease, --accent2 0.9s ease, filter 0.5s ease;
+  }
+
+  /* Warm, dimmed "tired eyes" filter — mirrors a warm night browser filter */
+  body.warm {
+    filter: brightness(0.8) saturate(0.6) sepia(0.18) contrast(0.95);
+  }
+
+  /* ---------- Header ---------- */
+  .head {
+    width: 100%;
+    max-width: 480px;
+    padding: 22px 20px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    z-index: 3;
+  }
+
+  .wordmark {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: 17px;
+    letter-spacing: 0.14em;
+    color: var(--ink-faint);
+    user-select: none;
+  }
+
+  .toggle {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.02);
+    backdrop-filter: blur(6px);
+  }
+
+  .seg {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--ink-dim);
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    padding: 8px 15px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color 0.35s ease, background 0.35s ease;
+    white-space: nowrap;
+  }
+  .seg:hover { color: var(--ink); }
+  .seg[aria-pressed="true"] {
+    color: #08131a;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, #fff), var(--accent));
+    box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  .seg:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .pattern {
+    font-size: 12.5px;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    text-align: center;
+    min-height: 16px;
+    transition: color 0.4s ease;
+  }
+  .pattern b { color: var(--ink-dim); font-weight: 500; }
+
+  /* ---------- Stage ---------- */
+  .stage {
+    flex: 1;
+    width: 100%;
+    display: grid;
+    place-items: center;
+    position: relative;
+    min-height: 0;
+  }
+  .center {
+    position: relative;
+    width: var(--orb);
+    height: var(--orb);
+    display: grid;
+    place-items: center;
+  }
+
+  .breather {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    will-change: transform;
+    transform: scale(0.52);
+  }
+  .orb-glow {
+    position: absolute;
+    width: 128%;
+    height: 128%;
+    border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in srgb, var(--accent) 60%, transparent) 0%, transparent 66%);
+    filter: blur(34px);
+    opacity: var(--glow, 0.4);
+    transition: opacity 0.2s linear;
+  }
+  .orb {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 34%,
+        color-mix(in srgb, var(--accent) 45%, #ffffff) 0%,
+        var(--accent) 46%,
+        var(--accent2) 100%);
+    box-shadow:
+      inset 0 0 42px rgba(255, 255, 255, 0.14),
+      inset 0 -22px 52px rgba(0, 0, 0, 0.28),
+      0 0 46px color-mix(in srgb, var(--accent) 26%, transparent);
+  }
+  .orb::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+  }
+
+  .readout {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    pointer-events: none;
+    user-select: none;
+  }
+  .phase-word {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 300;
+    font-size: clamp(26px, 8vw, 38px);
+    letter-spacing: 0.04em;
+    line-height: 1;
+    color: #f3f8f9;
+    text-shadow: 0 1px 20px rgba(0, 0, 0, 0.35);
+    /* nudge right to offset trailing letter-spacing + left-heavy glyph stems */
+    transform: translateX(0.05em);
+  }
+  .count {
+    margin-top: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    color: rgba(255, 255, 255, 0.72);
+    font-variant-numeric: tabular-nums;
+    min-height: 18px;
+    /* offset the larger trailing letter-spacing on the single digit */
+    transform: translateX(0.09em);
+  }
+
+  /* ---------- Controls ---------- */
+  .controls {
+    width: 100%;
+    max-width: 480px;
+    padding: 0 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    z-index: 3;
+  }
+
+  .pace {
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+  }
+  .pace.hidden { visibility: hidden; opacity: 0; }
+  .pace label {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    white-space: nowrap;
+  }
+  .pace output {
+    font-size: 12px;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    min-width: 66px;
+  }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    flex: 1;
+    height: 3px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent) var(--fill, 25%), var(--line) var(--fill, 25%));
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 15px; height: 15px; border-radius: 50%;
+    background: var(--ink);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
+    cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 15px; height: 15px; border: 0; border-radius: 50%;
+    background: var(--ink);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
+    cursor: pointer;
+  }
+  input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+
+  .row {
+    width: 100%;
+    max-width: 340px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .start {
+    appearance: none;
+    flex: 1;
+    height: 48px;
+    padding: 0 22px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.25s ease, border-color 0.25s ease, transform 0.1s ease;
+  }
+  .start:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  .start:active { transform: scale(0.98); }
+  .start:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .snd, .rst {
+    appearance: none;
+    flex: none;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink-faint);
+    font-family: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    transition: color 0.25s ease, border-color 0.25s ease, background 0.25s ease, transform 0.1s ease;
+  }
+  .snd:hover, .rst:hover { color: var(--ink-dim); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+  .snd:active, .rst:active { transform: scale(0.95); }
+  .snd:focus-visible, .rst:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .snd svg, .rst svg { width: 15px; height: 15px; display: block; flex: none; }
+  .snd[aria-pressed="true"] {
+    color: var(--ink);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  .snd small, .rst small {
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .snd small { font-size: 8px; }
+  .rst small { font-size: 7px; letter-spacing: 0.03em; margin-top: 1px; }
+
+  /* ---------- Side rails (timer + filter) ---------- */
+  .timer-rail, .filter-rail {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+    z-index: 4;
+  }
+  .timer-rail { right: 6px; }
+  .filter-rail { left: 6px; }
+  /* invisible placeholders keep the filter button aligned with the top timer button */
+  .rail-spacer { width: 46px; height: 46px; visibility: hidden; }
+  #filterBtn svg { width: 17px; height: 17px; display: block; }
+  .timer-cap {
+    font-size: 9.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 1px;
+  }
+  .tbtn {
+    appearance: none;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--ink-dim);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    transition: color 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+  }
+  .tbtn small {
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    font-weight: 400;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+  }
+  .tbtn:hover { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+  .tbtn[aria-pressed="true"] {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 90%, #fff), var(--accent));
+    color: #08131a;
+    border-color: transparent;
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  .tbtn[aria-pressed="true"] small { color: rgba(8, 19, 26, 0.72); }
+  .tbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .cycles {
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+    min-height: 15px;
+  }
+
+  /* ---------- Footer instruction ---------- */
+  .instruction {
+    width: 100%;
+    max-width: 480px;
+    padding: 20px 22px calc(28px + env(safe-area-inset-bottom));
+    text-align: center;
+    font-size: 15px;
+    letter-spacing: 0.01em;
+    color: var(--ink-dim);
+    line-height: 1.5;
+    min-height: 62px;
+    transition: color 0.4s ease;
+    z-index: 3;
+  }
+
+  @media (max-height: 620px) {
+    :root { --orb: clamp(130px, 34vh, 220px); }
+    .head { padding-top: 12px; gap: 10px; }
+    .instruction { padding-bottom: 16px; min-height: 44px; }
+    .timer-rail, .filter-rail { gap: 6px; }
+    .tbtn { width: 38px; height: 38px; font-size: 12px; }
+    .tbtn small { font-size: 7px; }
+    .rail-spacer { width: 38px; height: 38px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orb-glow { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <header class="head">
+    <div class="wordmark">Breathe</div>
+    <div class="toggle" role="group" aria-label="Breathing technique">
+      <button class="seg" data-key="resonance" aria-pressed="true">Resonance</button>
+      <button class="seg" data-key="478" aria-pressed="false">4-7-8</button>
+      <button class="seg" data-key="box" aria-pressed="false">Box</button>
+    </div>
+    <div class="pattern" id="pattern"></div>
+  </header>
+
+  <main class="stage">
+    <div class="center">
+      <div class="breather" id="breather">
+        <div class="orb-glow"></div>
+        <div class="orb"></div>
+      </div>
+      <div class="readout">
+        <div class="phase-word" id="word">Ready</div>
+        <div class="count" id="count"></div>
+      </div>
+    </div>
+    <div class="filter-rail" role="group" aria-label="Display filter">
+      <span class="timer-cap">filter</span>
+      <button class="tbtn" id="filterBtn" aria-pressed="false" aria-label="Toggle warm dim filter">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <span class="rail-spacer" aria-hidden="true"></span>
+      <span class="rail-spacer" aria-hidden="true"></span>
+      <span class="rail-spacer" aria-hidden="true"></span>
+    </div>
+    <div class="timer-rail" role="group" aria-label="Session timer">
+      <span class="timer-cap">timer</span>
+      <button class="tbtn" data-min="1" aria-pressed="false">1<small>min</small></button>
+      <button class="tbtn" data-min="5" aria-pressed="false">5<small>min</small></button>
+      <button class="tbtn" data-min="10" aria-pressed="false">10<small>min</small></button>
+      <button class="tbtn" data-min="20" aria-pressed="false">20<small>min</small></button>
+    </div>
+  </main>
+
+  <div class="controls">
+    <div class="pace" id="pace">
+      <label for="paceInput">Pace</label>
+      <input type="range" id="paceInput" min="4" max="6" step="0.1" value="5.5" aria-label="Breath pace in seconds">
+      <output id="paceOut">5.5s in / out</output>
+    </div>
+    <div class="row">
+      <button class="rst" id="reset" aria-label="Restart cycle count">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+        <small>Cycle</small>
+      </button>
+      <button class="start" id="start">Start</button>
+      <button class="snd" id="sound" aria-pressed="false" aria-label="Toggle sound cues">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M16 9a5 5 0 0 1 0 6"/></svg>
+        <small id="sndLabel">Off</small>
+      </button>
+    </div>
+    <div class="cycles" id="cycles"></div>
+  </div>
+
+  <footer class="instruction" id="instruction">Get comfortable. Press start when you're ready.</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var TECHNIQUES = {
+    resonance: {
+      name: "Resonance", purpose: "balance",
+      accent: "#54d1c4", accent2: "#2fa8b8",
+      dynamic: true
+    },
+    "478": {
+      name: "4-7-8", purpose: "sleep",
+      accent: "#9a8ce0", accent2: "#6e63c4",
+      phases: [
+        { type: "inhale",    sec: 4, word: "Inhale", text: "Breathe in through your nose" },
+        { type: "hold-full", sec: 7, word: "Hold",   text: "Hold — stay full" },
+        { type: "exhale",    sec: 8, word: "Exhale", text: "Breathe out through your mouth, with a soft whoosh" }
+      ]
+    },
+    box: {
+      name: "Box", purpose: "focus",
+      accent: "#6c9be8", accent2: "#4b78c8",
+      phases: [
+        { type: "inhale",     sec: 4, word: "Inhale", text: "Breathe in through your nose" },
+        { type: "hold-full",  sec: 4, word: "Hold",   text: "Hold — stay full" },
+        { type: "exhale",     sec: 4, word: "Exhale", text: "Breathe out through your nose" },
+        { type: "hold-empty", sec: 4, word: "Hold",   text: "Hold — stay empty" }
+      ]
+    }
+  };
+
+  var MIN = 0.52, MAX = 1.0;
+
+  // ---- State ----
+  var key = "resonance";
+  var phases = [];
+  var idx = 0;
+  var elapsed = 0;      // seconds into current phase
+  var running = false;
+  var started = false;  // has a session begun (affects Resume vs Start)
+  var cycles = 0;
+  var paceSec = 5.5;
+  var soundOn = false;
+  var timerMin = null;  // selected session length in minutes, or null for open-ended
+  var last = performance.now();
+
+  // ---- Elements ----
+  var breather = document.getElementById("breather");
+  var wordEl = document.getElementById("word");
+  var countEl = document.getElementById("count");
+  var instrEl = document.getElementById("instruction");
+  var patternEl = document.getElementById("pattern");
+  var cyclesEl = document.getElementById("cycles");
+  var startBtn = document.getElementById("start");
+  var soundBtn = document.getElementById("sound");
+  var sndLabel = document.getElementById("sndLabel");
+  var paceWrap = document.getElementById("pace");
+  var paceInput = document.getElementById("paceInput");
+  var paceOut = document.getElementById("paceOut");
+  var segs = Array.prototype.slice.call(document.querySelectorAll(".seg"));
+  var tbtns = Array.prototype.slice.call(document.querySelectorAll(".tbtn"));
+
+  var ease = function (p) { return 0.5 - 0.5 * Math.cos(Math.PI * Math.min(Math.max(p, 0), 1)); };
+
+  function buildPhases() {
+    var t = TECHNIQUES[key];
+    if (t.dynamic) {
+      phases = [
+        { type: "inhale", sec: paceSec, word: "Inhale", text: "Breathe in through your nose" },
+        { type: "exhale", sec: paceSec, word: "Exhale", text: "Breathe out through your nose" }
+      ];
+    } else {
+      phases = t.phases.map(function (p) { return Object.assign({}, p); });
+    }
+  }
+
+  function patternText() {
+    var t = TECHNIQUES[key];
+    var nums = t.dynamic
+      ? paceSec.toFixed(1) + " · " + paceSec.toFixed(1)
+      : t.phases.map(function (p) { return p.sec; }).join(" · ");
+    return "<b>" + t.purpose + "</b> &nbsp;·&nbsp; " + nums + " &nbsp;·&nbsp; seconds per phase";
+  }
+
+  function applyTechnique(newKey) {
+    key = newKey;
+    var t = TECHNIQUES[key];
+    document.documentElement.style.setProperty("--accent", t.accent);
+    document.documentElement.style.setProperty("--accent2", t.accent2);
+    document.body.style.setProperty("--accent", t.accent);
+    document.body.style.setProperty("--accent2", t.accent2);
+    segs.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.key === key)); });
+    paceWrap.classList.toggle("hidden", !t.dynamic);
+    patternEl.innerHTML = patternText();
+    buildPhases();
+    idx = 0; elapsed = 0; cycles = 0;
+    updateCycles();
+    enterPhase(true);
+  }
+
+  function enterPhase(rest) {
+    var ph = phases[idx];
+    if (rest && !running) {
+      wordEl.textContent = "Ready";
+      countEl.textContent = "";
+      instrEl.textContent = started ? "Paused. Press resume to continue." : "Get comfortable. Press start when you're ready.";
+      setScale(MIN, 0);
+      return;
+    }
+    wordEl.textContent = ph.word;
+    instrEl.textContent = ph.text;
+    if (soundOn) cue(ph.type);
+  }
+
+  function baseScale(type) {
+    return (type === "inhale" || type === "hold-full") ? MAX : MIN;
+  }
+
+  function scaleFor(ph, p) {
+    switch (ph.type) {
+      case "inhale":     return MIN + (MAX - MIN) * ease(p);
+      case "exhale":     return MIN + (MAX - MIN) * (1 - ease(p));
+      case "hold-full":  return MAX;
+      case "hold-empty": return MIN;
+      default:           return MIN;
+    }
+  }
+
+  function setScale(s, intensity) {
+    breather.style.transform = "scale(" + s.toFixed(4) + ")";
+    var glow = 0.26 + 0.55 * intensity;
+    breather.style.setProperty("--glow", glow.toFixed(3));
+  }
+
+  function cycleLen() {
+    var t = TECHNIQUES[key];
+    if (t.dynamic) return 2 * paceSec;
+    return t.phases.reduce(function (a, p) { return a + p.sec; }, 0);
+  }
+
+  function targetCycles() {
+    if (!timerMin) return null;
+    return Math.max(1, Math.round((timerMin * 60) / cycleLen()));
+  }
+
+  function updateCycles() {
+    var tgt = targetCycles();
+    if (tgt) {
+      cyclesEl.textContent = cycles + " / " + tgt + " cycles";
+    } else {
+      cyclesEl.textContent = cycles === 1 ? "1 cycle" : cycles + " cycles";
+    }
+  }
+
+  function complete() {
+    running = false;
+    started = false;
+    wordEl.textContent = "Done";
+    countEl.textContent = "";
+    instrEl.textContent = "Session complete. Take a moment.";
+    setScale(MIN, 0);
+    if (soundOn) cue("complete", true);
+    setStartLabel();
+  }
+
+  function frame(now) {
+    var dt = (now - last) / 1000;
+    last = now;
+    if (dt > 0.25) dt = 0.25; // guard against tab-switch jumps
+
+    if (running) {
+      var ph = phases[idx];
+      elapsed += dt;
+      var p = elapsed / ph.sec;
+      var s = scaleFor(ph, p);
+      var intensity = (s - MIN) / (MAX - MIN);
+      setScale(s, intensity);
+
+      var remain = Math.max(0, Math.ceil(ph.sec - elapsed));
+      countEl.textContent = remain > 0 ? String(remain) : "";
+
+      if (elapsed >= ph.sec) {
+        idx++;
+        elapsed = 0;
+        if (idx >= phases.length) {
+          idx = 0;
+          cycles++;
+          updateCycles();
+          var tgt = targetCycles();
+          if (tgt && cycles >= tgt) { complete(); }
+        }
+        if (running) enterPhase(false);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ---- Sound cues (gentle, optional) ----
+  var actx = null;
+  function ensureAudio() {
+    if (!actx) {
+      try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { actx = null; }
+    }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function cue(type, long) {
+    if (!actx) return;
+    var freq = 440;
+    if (type === "inhale") freq = 528;
+    else if (type === "exhale") freq = 396;
+    else if (type === "complete") freq = 528;
+    var t0 = actx.currentTime;
+    var dur = long ? 2.8 : 0.95;
+    var attack = long ? 0.3 : 0.08;
+    var peak = long ? 0.06 : 0.05;
+    var osc = actx.createOscillator();
+    var g = actx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak, t0 + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur - 0.05);
+    osc.connect(g); g.connect(actx.destination);
+    osc.start(t0); osc.stop(t0 + dur);
+  }
+
+  // ---- Controls ----
+  function setStartLabel() {
+    startBtn.textContent = running ? "Pause" : (started ? "Resume" : "Start");
+  }
+
+  startBtn.addEventListener("click", function () {
+    running = !running;
+    if (running) {
+      if (!started) { idx = 0; elapsed = 0; cycles = 0; updateCycles(); }
+      started = true;
+      last = performance.now();
+      enterPhase(false);
+    } else {
+      // Freeze the orb where it is; only update the text.
+      wordEl.textContent = "Paused";
+      countEl.textContent = "";
+      instrEl.textContent = "Paused. Press resume to continue.";
+    }
+    setStartLabel();
+  });
+
+  segs.forEach(function (b) {
+    b.addEventListener("click", function () {
+      running = false;
+      started = false;
+      setStartLabel();
+      applyTechnique(b.dataset.key);
+    });
+  });
+
+  document.getElementById("filterBtn").addEventListener("click", function () {
+    var on = document.body.classList.toggle("warm");
+    this.setAttribute("aria-pressed", String(on));
+  });
+
+  document.getElementById("reset").addEventListener("click", function () {
+    idx = 0;
+    elapsed = 0;
+    cycles = 0;
+    updateCycles();
+    if (running) {
+      // Keep breathing, but start the count over from the first inhale.
+      last = performance.now();
+      enterPhase(false);
+    } else {
+      // Return to a clean pre-start state.
+      started = false;
+      setStartLabel();
+      enterPhase(true);
+    }
+  });
+
+  paceInput.addEventListener("input", function () {
+    paceSec = parseFloat(paceInput.value);
+    paceOut.textContent = paceSec.toFixed(1) + "s in / out";
+    var fill = ((paceSec - 4) / (6 - 4)) * 100;
+    paceInput.style.setProperty("--fill", fill + "%");
+    if (key === "resonance") {
+      buildPhases();
+      patternEl.innerHTML = patternText();
+      updateCycles();
+    }
+  });
+
+  tbtns.forEach(function (b) {
+    b.addEventListener("click", function () {
+      var m = parseInt(b.dataset.min, 10);
+      timerMin = (timerMin === m) ? null : m;
+      tbtns.forEach(function (x) {
+        x.setAttribute("aria-pressed", String(parseInt(x.dataset.min, 10) === timerMin));
+      });
+      updateCycles();
+    });
+  });
+
+  soundBtn.addEventListener("click", function () {
+    soundOn = !soundOn;
+    soundBtn.setAttribute("aria-pressed", String(soundOn));
+    sndLabel.textContent = soundOn ? "On" : "Off";
+    if (soundOn) ensureAudio();
+  });
+
+  // Space toggles start/pause
+  window.addEventListener("keydown", function (e) {
+    if (e.code === "Space" && e.target.tagName !== "INPUT" && e.target.tagName !== "BUTTON") {
+      e.preventDefault();
+      startBtn.click();
+    }
+  });
+
+  // ---- Init ----
+  paceInput.style.setProperty("--fill", (((5.5 - 4) / 2) * 100) + "%");
+  applyTechnique("resonance");
+  setStartLabel();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
