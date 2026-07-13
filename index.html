@@ -222,7 +222,10 @@
        text node repaints in isolation instead of jittering the whole readout */
     transform: translateX(0.05em) translateZ(0);
     backface-visibility: hidden;
-    transition: opacity 0.16s ease;
+    /* cubic-bezier approximates a sine ease-in-out: a gentle ramp up and back
+       down rather than linear's default quick-start feel, so the cross-fade
+       reads as smooth and unhurried rather than a snap */
+    transition: opacity 0.22s cubic-bezier(0.45, 0, 0.55, 1);
   }
   .phase-word.fading { opacity: 0; }
   .count {
@@ -561,7 +564,7 @@
        every phase change perfectly still regardless of text length. */
     height: calc(93px + env(safe-area-inset-bottom));
     overflow: hidden;
-    transition: color 0.4s ease, opacity 0.16s ease;
+    transition: color 0.4s ease, opacity 0.22s cubic-bezier(0.45, 0, 0.55, 1);
     z-index: 3;
   }
   .instruction.fading { opacity: 0; }
@@ -728,7 +731,7 @@
           el.classList.remove("fading");
         });
       });
-    }, 160);
+    }, 220);
     fadeTimers.set(el, t);
   }
   function setWord(text) { fadeText(wordEl, text); }
