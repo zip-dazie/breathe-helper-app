@@ -33,7 +33,17 @@
     transition: --accent 0.9s ease, --accent2 0.9s ease;
   }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  button { touch-action: manipulation; }
 
   html {
     height: 100%;
@@ -253,29 +263,58 @@
     white-space: nowrap;
     min-width: 66px;
   }
+  /* Range sliders: the input's own box is the touch target (tall), while the
+     visible track is drawn as a thin pseudo-element line centered inside it.
+     touch-action: none stops the browser from waiting to see if this is a
+     scroll gesture before allowing the drag — that wait is what made sliders
+     feel like they needed a few tries on mobile. */
   input[type="range"] {
     -webkit-appearance: none; appearance: none;
     flex: 1;
+    height: 40px;
+    margin: 0;
+    background: transparent;
+    outline: none;
+    cursor: pointer;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
     height: 3px;
     border-radius: 3px;
     background: linear-gradient(90deg, var(--accent) var(--fill, 25%), var(--line) var(--fill, 25%));
-    outline: none;
-    cursor: pointer;
+  }
+  input[type="range"]::-moz-range-track {
+    height: 3px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent) var(--fill, 25%), var(--line) var(--fill, 25%));
   }
   input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none; appearance: none;
-    width: 15px; height: 15px; border-radius: 50%;
+    width: 18px; height: 18px; border-radius: 50%;
     background: var(--ink);
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
     cursor: pointer;
+    margin-top: -7.5px; /* centers the 18px thumb on the 3px track */
   }
   input[type="range"]::-moz-range-thumb {
-    width: 15px; height: 15px; border: 0; border-radius: 50%;
+    width: 18px; height: 18px; border: 0; border-radius: 50%;
     background: var(--ink);
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
     cursor: pointer;
   }
   input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+
+  /* Coarse pointers (touch) get an even larger thumb and touch target */
+  @media (pointer: coarse) {
+    input[type="range"] { height: 44px; }
+    input[type="range"]::-webkit-slider-thumb {
+      width: 24px; height: 24px;
+      margin-top: -10.5px;
+    }
+    input[type="range"]::-moz-range-thumb { width: 24px; height: 24px; }
+  }
 
   .row {
     width: 100%;
@@ -385,7 +424,7 @@
   .vol-slider-wrap {
     position: relative;
     height: 104px;
-    width: 26px;
+    width: 44px;
   }
   .vol-slider {
     position: absolute;
@@ -422,7 +461,7 @@
      at the bottom; it rests at 3/4 so it can go a quarter more muted. */
   .filter-slider-wrap {
     position: relative;
-    width: 26px;
+    width: 44px;
     height: 156px;
   }
   .filter-slider {
