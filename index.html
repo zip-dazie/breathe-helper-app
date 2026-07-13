@@ -684,8 +684,10 @@
       var intensity = (s - MIN) / (MAX - MIN);
       setScale(s, intensity);
 
-      var remain = Math.max(0, Math.ceil(ph.sec - elapsed));
-      countEl.textContent = remain > 0 ? String(remain) : "";
+      var remain = Math.ceil(ph.sec - elapsed);
+      if (elapsed < ph.sec) {
+        countEl.textContent = String(Math.max(1, remain));
+      }
 
       if (elapsed >= ph.sec) {
         idx++;
@@ -697,7 +699,10 @@
           var tgt = targetCycles();
           if (tgt && cycles >= tgt) { complete(); }
         }
-        if (running) enterPhase(false);
+        if (running) {
+          enterPhase(false);
+          countEl.textContent = String(Math.ceil(phases[idx].sec));
+        }
       }
     }
     requestAnimationFrame(frame);
