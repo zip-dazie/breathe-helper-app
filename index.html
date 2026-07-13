@@ -55,12 +55,7 @@
     -webkit-tap-highlight-color: transparent;
     -webkit-font-smoothing: antialiased;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    transition: --accent 0.9s ease, --accent2 0.9s ease, filter 0.5s ease;
-  }
-
-  /* Warm, dimmed "tired eyes" filter — mirrors a warm night browser filter */
-  body.warm {
-    filter: brightness(0.8) saturate(0.6) sepia(0.18) contrast(0.95);
+    transition: --accent 0.9s ease, --accent2 0.9s ease, filter 0.25s ease;
   }
 
   /* ---------- Header ---------- */
@@ -79,9 +74,9 @@
     font-family: 'Fraunces', Georgia, serif;
     font-style: italic;
     font-weight: 300;
-    font-size: 17px;
-    letter-spacing: 0.14em;
-    color: var(--ink-faint);
+    font-size: 26px;
+    letter-spacing: 0.08em;
+    color: var(--ink-dim);
     user-select: none;
   }
 
@@ -202,8 +197,11 @@
     line-height: 1;
     color: #f3f8f9;
     text-shadow: 0 1px 20px rgba(0, 0, 0, 0.35);
-    /* nudge right to offset trailing letter-spacing + left-heavy glyph stems */
-    transform: translateX(0.05em);
+    /* nudge right to offset trailing letter-spacing + left-heavy glyph stems;
+       translateZ(0) promotes this to its own compositor layer so swapping the
+       text node repaints in isolation instead of jittering the whole readout */
+    transform: translateX(0.05em) translateZ(0);
+    backface-visibility: hidden;
   }
   .count {
     margin-top: 8px;
@@ -331,6 +329,9 @@
   .snd:active, .rst:active { transform: scale(0.95); }
   .snd:focus-visible, .rst:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .snd svg, .rst svg { width: 15px; height: 15px; display: block; flex: none; }
+  .snd .ic-on { display: none; }
+  .snd[aria-pressed="true"] .ic-off { display: none; }
+  .snd[aria-pressed="true"] .ic-on { display: block; }
   .snd[aria-pressed="true"] {
     color: var(--ink);
     border-color: color-mix(in srgb, var(--accent) 45%, transparent);
@@ -344,6 +345,64 @@
   }
   .snd small { font-size: 8px; }
   .rst small { font-size: 7px; letter-spacing: 0.03em; margin-top: 1px; }
+  .snd { -webkit-touch-callout: none; user-select: none; }
+
+  /* ---------- Volume popup (vertical fader) ---------- */
+  .snd-wrap { position: relative; flex: none; display: inline-flex; }
+  .vol-pop {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 10px;
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--bg-a) 84%, #000);
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    z-index: 30;
+    transform-origin: bottom center;
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.95);
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .vol-pop.open { opacity: 1; transform: translate(-50%, 0) scale(1); pointer-events: auto; }
+  .vol-pop::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -6px;
+    border: 6px solid transparent;
+    border-top-color: color-mix(in srgb, var(--bg-a) 84%, #000);
+  }
+  .vol-pop svg { width: 16px; height: 16px; color: var(--ink-dim); flex: none; }
+  .vol-slider-wrap {
+    position: relative;
+    height: 104px;
+    width: 26px;
+  }
+  .vol-slider {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 104px;
+    margin: 0;
+    flex: none;
+    transform: translate(-50%, -50%) rotate(-90deg);
+    transform-origin: center;
+  }
+  .vol-val {
+    font-size: 11px;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
 
   /* ---------- Side rails (timer + filter) ---------- */
   .timer-rail, .filter-rail {
@@ -358,8 +417,24 @@
   }
   .timer-rail { right: 6px; }
   .filter-rail { left: 6px; }
-  /* invisible placeholders keep the filter button aligned with the top timer button */
-  .rail-spacer { width: 46px; height: 46px; visibility: hidden; }
+  /* Filter-intensity fader: replaces the balancing line, running from below the
+     filter button to the 20-min timer button's bottom edge. Max (most muted) is
+     at the bottom; it rests at 3/4 so it can go a quarter more muted. */
+  .filter-slider-wrap {
+    position: relative;
+    width: 26px;
+    height: 156px;
+  }
+  .filter-slider {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 156px;
+    margin: 0;
+    transform: translate(-50%, -50%) rotate(90deg);
+    transform-origin: center;
+  }
+  .filter-slider:disabled { opacity: 0.35; cursor: not-allowed; }
   #filterBtn svg { width: 17px; height: 17px; display: block; }
   .timer-cap {
     font-size: 9.5px;
@@ -419,16 +494,12 @@
     width: 100%;
     max-width: 480px;
     padding: 20px 22px calc(28px + env(safe-area-inset-bottom));
-    height: 72px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     text-align: center;
     font-size: 15px;
     letter-spacing: 0.01em;
     color: var(--ink-dim);
     line-height: 1.5;
-    flex-shrink: 0;
+    min-height: 62px;
     transition: color 0.4s ease;
     z-index: 3;
   }
@@ -440,7 +511,8 @@
     .timer-rail, .filter-rail { gap: 6px; }
     .tbtn { width: 38px; height: 38px; font-size: 12px; }
     .tbtn small { font-size: 7px; }
-    .rail-spacer { width: 38px; height: 38px; }
+    .filter-slider-wrap { height: 126px; }
+    .filter-slider { width: 126px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -475,9 +547,9 @@
       <button class="tbtn" id="filterBtn" aria-pressed="false" aria-label="Toggle warm dim filter">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       </button>
-      <span class="rail-spacer" aria-hidden="true"></span>
-      <span class="rail-spacer" aria-hidden="true"></span>
-      <span class="rail-spacer" aria-hidden="true"></span>
+      <div class="filter-slider-wrap">
+        <input type="range" class="filter-slider" id="filterSlider" min="0" max="100" value="75" aria-label="Filter intensity" disabled>
+      </div>
     </div>
     <div class="timer-rail" role="group" aria-label="Session timer">
       <span class="timer-cap">timer</span>
@@ -495,15 +567,25 @@
       <output id="paceOut">5.5s in / out</output>
     </div>
     <div class="row">
-      <button class="rst" id="reset" aria-label="Restart cycle count">
+      <button class="rst" id="reset" aria-label="Reset cycle count">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-        <small>Cycle</small>
+        <small>Reset</small>
       </button>
       <button class="start" id="start">Start</button>
-      <button class="snd" id="sound" aria-pressed="false" aria-label="Toggle sound cues">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M16 9a5 5 0 0 1 0 6"/></svg>
-        <small id="sndLabel">Off</small>
-      </button>
+      <div class="snd-wrap">
+        <button class="snd" id="sound" aria-pressed="false" aria-label="Toggle sound cues (long-press or right-click for volume)">
+          <svg class="ic-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+          <svg class="ic-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6a9 9 0 0 1 0 12"/></svg>
+          <small id="sndLabel">Off</small>
+        </button>
+        <div class="vol-pop" id="volPop" role="dialog" aria-label="Volume" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6a9 9 0 0 1 0 12"/></svg>
+          <div class="vol-slider-wrap">
+            <input type="range" class="vol-slider" id="volSlider" min="0" max="100" value="80" aria-label="Volume level">
+          </div>
+          <span class="vol-val" id="volVal">80</span>
+        </div>
+      </div>
     </div>
     <div class="cycles" id="cycles"></div>
   </div>
@@ -553,6 +635,7 @@
   var cycles = 0;
   var paceSec = 5.5;
   var soundOn = false;
+  var volume = 0.8;     // 0..1, adjustable via long-press / right-click on the sound button
   var timerMin = null;  // selected session length in minutes, or null for open-ended
   var last = performance.now();
 
@@ -563,6 +646,11 @@
   var instrEl = document.getElementById("instruction");
   var patternEl = document.getElementById("pattern");
   var cyclesEl = document.getElementById("cycles");
+
+  function setWord(text) {
+    if (wordEl.textContent === text) return;
+    wordEl.textContent = text;
+  }
   var startBtn = document.getElementById("start");
   var soundBtn = document.getElementById("sound");
   var sndLabel = document.getElementById("sndLabel");
@@ -570,7 +658,7 @@
   var paceInput = document.getElementById("paceInput");
   var paceOut = document.getElementById("paceOut");
   var segs = Array.prototype.slice.call(document.querySelectorAll(".seg"));
-  var tbtns = Array.prototype.slice.call(document.querySelectorAll(".tbtn"));
+  var tbtns = Array.prototype.slice.call(document.querySelectorAll(".timer-rail .tbtn"));
 
   var ease = function (p) { return 0.5 - 0.5 * Math.cos(Math.PI * Math.min(Math.max(p, 0), 1)); };
 
@@ -613,13 +701,13 @@
   function enterPhase(rest) {
     var ph = phases[idx];
     if (rest && !running) {
-      wordEl.textContent = "Ready";
+      setWord("Ready");
       countEl.textContent = "";
       instrEl.textContent = started ? "Paused. Press resume to continue." : "Get comfortable. Press start when you're ready.";
       setScale(MIN, 0);
       return;
     }
-    wordEl.textContent = ph.word;
+    setWord(ph.word);
     instrEl.textContent = ph.text;
     if (soundOn) cue(ph.type);
   }
@@ -667,7 +755,7 @@
   function complete() {
     running = false;
     started = false;
-    wordEl.textContent = "Done";
+    setWord("Done");
     countEl.textContent = "";
     instrEl.textContent = "Session complete. Take a moment.";
     setScale(MIN, 0);
@@ -688,10 +776,8 @@
       var intensity = (s - MIN) / (MAX - MIN);
       setScale(s, intensity);
 
-      var remain = Math.ceil(ph.sec - elapsed);
-      if (elapsed < ph.sec) {
-        countEl.textContent = String(Math.max(1, remain));
-      }
+      var remain = Math.max(0, Math.ceil(ph.sec - elapsed));
+      countEl.textContent = remain > 0 ? String(remain) : "";
 
       if (elapsed >= ph.sec) {
         idx++;
@@ -703,10 +789,7 @@
           var tgt = targetCycles();
           if (tgt && cycles >= tgt) { complete(); }
         }
-        if (running) {
-          enterPhase(false);
-          countEl.textContent = String(Math.ceil(phases[idx].sec));
-        }
+        if (running) enterPhase(false);
       }
     }
     requestAnimationFrame(frame);
@@ -722,7 +805,7 @@
     if (actx && actx.state === "suspended") actx.resume();
   }
   function cue(type, long) {
-    if (!actx) return;
+    if (!actx || volume <= 0) return;
     var freq = 440;
     if (type === "inhale") freq = 528;
     else if (type === "exhale") freq = 396;
@@ -730,7 +813,7 @@
     var t0 = actx.currentTime;
     var dur = long ? 2.8 : 0.95;
     var attack = long ? 0.3 : 0.08;
-    var peak = long ? 0.06 : 0.05;
+    var peak = (long ? 0.42 : 0.38) * volume;   // louder base, scaled by user volume
     var osc = actx.createOscillator();
     var g = actx.createGain();
     osc.type = "sine";
@@ -756,7 +839,7 @@
       enterPhase(false);
     } else {
       // Freeze the orb where it is; only update the text.
-      wordEl.textContent = "Paused";
+      setWord("Paused");
       countEl.textContent = "";
       instrEl.textContent = "Paused. Press resume to continue.";
     }
@@ -772,11 +855,37 @@
     });
   });
 
+  // ---- Warm filter: button toggles on/off, fader sets intensity ----
+  var warmOn = false;
+  var filterLevel = 0.75;   // 0 = none (top), 0.75 = default look, 1 = most muted (bottom)
+  var filterSlider = document.getElementById("filterSlider");
+
+  function computeFilter(t) {
+    // interpolate from identity (t=0) through the original look (t=0.75)
+    var b = (1 - 0.26667 * t).toFixed(4);
+    var s = (1 - 0.53333 * t).toFixed(4);
+    var se = (0.24 * t).toFixed(4);
+    var c = (1 - 0.06667 * t).toFixed(4);
+    return "brightness(" + b + ") saturate(" + s + ") sepia(" + se + ") contrast(" + c + ")";
+  }
+  function applyFilter() {
+    document.body.style.filter = warmOn ? computeFilter(filterLevel) : "";
+  }
+
+  filterSlider.style.setProperty("--fill", filterSlider.value + "%");
+  filterSlider.addEventListener("input", function () {
+    filterLevel = parseInt(this.value, 10) / 100;
+    this.style.setProperty("--fill", this.value + "%");
+    applyFilter();
+  });
+
   document.getElementById("filterBtn").addEventListener("click", function () {
-    var on = document.body.classList.toggle("warm");
-    this.setAttribute("aria-pressed", String(on));
+    warmOn = !warmOn;
+    this.setAttribute("aria-pressed", String(warmOn));
+    filterSlider.disabled = !warmOn;
     var tm = document.querySelector('meta[name="theme-color"]');
-    if (tm) tm.setAttribute("content", on ? "#12120d" : "#0c1a20");
+    if (tm) tm.setAttribute("content", warmOn ? "#12120d" : "#0c1a20");
+    applyFilter();
   });
 
   document.getElementById("reset").addEventListener("click", function () {
@@ -819,15 +928,77 @@
     });
   });
 
-  soundBtn.addEventListener("click", function () {
+  // ---- Sound toggle + volume popup ----
+  function toggleSound() {
     soundOn = !soundOn;
     soundBtn.setAttribute("aria-pressed", String(soundOn));
     sndLabel.textContent = soundOn ? "On" : "Off";
-    if (soundOn) ensureAudio();
+    if (soundOn) { ensureAudio(); cue("inhale"); }
+  }
+
+  var volPop = document.getElementById("volPop");
+  var volSlider = document.getElementById("volSlider");
+  var volVal = document.getElementById("volVal");
+  var volOpen = false;
+  var lastPreview = 0;
+
+  function setVolFill() {
+    volSlider.style.setProperty("--fill", volSlider.value + "%");
+    volVal.textContent = volSlider.value;
+  }
+  function openVol() {
+    ensureAudio();
+    volSlider.value = Math.round(volume * 100);
+    setVolFill();
+    volPop.classList.add("open");
+    volPop.setAttribute("aria-hidden", "false");
+    volOpen = true;
+  }
+  function closeVol() {
+    volPop.classList.remove("open");
+    volPop.setAttribute("aria-hidden", "true");
+    volOpen = false;
+  }
+
+  volSlider.addEventListener("input", function () {
+    volume = parseInt(this.value, 10) / 100;
+    setVolFill();
+    var now = performance.now();
+    if (now - lastPreview > 140) { lastPreview = now; cue("hold-full"); } // preview level
+  });
+  volPop.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
+
+  // Long-press (touch) opens the volume popup
+  var lpTimer = null, longPressed = false;
+  soundBtn.addEventListener("pointerdown", function (e) {
+    if (e.pointerType === "mouse") return;   // desktop uses right-click instead
+    longPressed = false;
+    lpTimer = setTimeout(function () { longPressed = true; openVol(); }, 420);
+  });
+  function clearLP() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }
+  soundBtn.addEventListener("pointerup", clearLP);
+  soundBtn.addEventListener("pointerleave", clearLP);
+  soundBtn.addEventListener("pointercancel", clearLP);
+
+  soundBtn.addEventListener("click", function () {
+    if (longPressed) { longPressed = false; return; }  // suppress toggle right after a long-press
+    toggleSound();
+  });
+  soundBtn.addEventListener("contextmenu", function (e) {   // right-click on desktop
+    e.preventDefault();
+    if (volOpen) closeVol(); else openVol();
   });
 
-  // Space toggles start/pause
+  // Close the popup when interacting anywhere else
+  document.addEventListener("pointerdown", function (e) {
+    if (volOpen && !volPop.contains(e.target) && e.target !== soundBtn && !soundBtn.contains(e.target)) {
+      closeVol();
+    }
+  });
+
+  // Space toggles start/pause; Escape closes the volume popup
   window.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && volOpen) { closeVol(); return; }
     if (e.code === "Space" && e.target.tagName !== "INPUT" && e.target.tagName !== "BUTTON") {
       e.preventDefault();
       startBtn.click();
