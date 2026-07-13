@@ -419,15 +419,16 @@
     width: 100%;
     max-width: 480px;
     padding: 20px 22px calc(28px + env(safe-area-inset-bottom));
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
     font-size: 15px;
     letter-spacing: 0.01em;
     color: var(--ink-dim);
     line-height: 1.5;
-    min-height: 4.2em;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-shrink: 0;
     transition: color 0.4s ease;
     z-index: 3;
   }
