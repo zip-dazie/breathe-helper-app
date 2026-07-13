@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0c1a20">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Breathe">
 <title>Breathe</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,7 +35,10 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  html, body { height: 100%; }
+  html {
+    height: 100%;
+    background: var(--bg-b);
+  }
 
   body {
     font-family: 'Instrument Sans', system-ui, -apple-system, sans-serif;
@@ -38,12 +46,13 @@
     background:
       radial-gradient(1100px 820px at 50% 40%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%),
       linear-gradient(160deg, var(--bg-a), var(--bg-b) 70%);
-    background-attachment: fixed;
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
     align-items: center;
     overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
     -webkit-font-smoothing: antialiased;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     transition: --accent 0.9s ease, --accent2 0.9s ease, filter 0.5s ease;
@@ -187,7 +196,8 @@
   .phase-word {
     font-family: 'Fraunces', Georgia, serif;
     font-weight: 300;
-    font-size: clamp(26px, 8vw, 38px);
+    /* sized off the circle, not the viewport, so text-to-edge padding is consistent */
+    font-size: calc(var(--orb) * 0.125);
     letter-spacing: 0.04em;
     line-height: 1;
     color: #f3f8f9;
@@ -206,6 +216,9 @@
     /* offset the larger trailing letter-spacing on the single digit */
     transform: translateX(0.09em);
   }
+  /* when there's no countdown (Ready / Paused / Done), don't reserve its space
+     so the word sits dead-center in the circle */
+  .count:empty { display: none; }
 
   /* ---------- Controls ---------- */
   .controls {
@@ -753,6 +766,8 @@
   document.getElementById("filterBtn").addEventListener("click", function () {
     var on = document.body.classList.toggle("warm");
     this.setAttribute("aria-pressed", String(on));
+    var tm = document.querySelector('meta[name="theme-color"]');
+    if (tm) tm.setAttribute("content", on ? "#12120d" : "#0c1a20");
   });
 
   document.getElementById("reset").addEventListener("click", function () {
