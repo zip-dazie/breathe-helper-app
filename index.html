@@ -390,12 +390,14 @@
   .rst small { font-size: 7px; letter-spacing: 0.03em; margin-top: 1px; }
   .snd { -webkit-touch-callout: none; user-select: none; }
 
-  /* ---------- Volume popup (vertical fader) ---------- */
+  /* ---------- Volume popup (vertical fader) ----------
+     position: fixed + a very high z-index means this always renders above
+     everything else on the page (rails, timer buttons, etc.) regardless of
+     any ancestor stacking-context quirks. Its on-screen position is computed
+     in JS from the sound button's actual location — see positionVolPop(). */
   .snd-wrap { position: relative; flex: none; display: inline-flex; }
   .vol-pop {
-    position: absolute;
-    bottom: calc(100% + 12px);
-    left: 50%;
+    position: fixed;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -407,14 +409,14 @@
     box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
-    z-index: 30;
+    z-index: 999;
     transform-origin: bottom center;
     opacity: 0;
-    transform: translate(-50%, 6px) scale(0.95);
+    transform: translateX(-50%) translateY(6px) scale(0.95);
     pointer-events: none;
     transition: opacity 0.18s ease, transform 0.18s ease;
   }
-  .vol-pop.open { opacity: 1; transform: translate(-50%, 0) scale(1); pointer-events: auto; }
+  .vol-pop.open { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); pointer-events: auto; }
   .vol-pop::after {
     content: "";
     position: absolute;
@@ -1007,10 +1009,16 @@
     volSlider.style.setProperty("--fill", volSlider.value + "%");
     volVal.textContent = volSlider.value;
   }
+  function positionVolPop() {
+    var r = soundBtn.getBoundingClientRect();
+    volPop.style.left = (r.left + r.width / 2) + "px";
+    volPop.style.bottom = (window.innerHeight - r.top + 12) + "px";
+  }
   function openVol() {
     ensureAudio();
     volSlider.value = Math.round(volume * 100);
     setVolFill();
+    positionVolPop();
     volPop.classList.add("open");
     volPop.setAttribute("aria-hidden", "false");
     volOpen = true;
@@ -1027,7 +1035,14 @@
     var now = performance.now();
     if (now - lastPreview > 140) { lastPreview = now; cue("hold-full"); } // preview level
   });
-  volPop.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
+  // Belt-and-suspenders: stop every relevant interaction event from bubbling
+  // out of the popup, since some mobile browsers deliver touch interactions
+  // on native <input type=range> thumbs inconsistently through the Pointer
+  // Events pipeline.
+  ["pointerdown", "touchstart", "mousedown"].forEach(function (evt) {
+    volPop.addEventListener(evt, function (e) { e.stopPropagation(); }, { passive: true });
+  });
+  window.addEventListener("resize", function () { if (volOpen) positionVolPop(); });
 
   // Long-press (touch) opens the volume popup
   var lpTimer = null, longPressed = false;
@@ -1050,8 +1065,12 @@
     if (volOpen) closeVol(); else openVol();
   });
 
-  // Close the popup when interacting anywhere else
-  document.addEventListener("pointerdown", function (e) {
+  // Close the popup when interacting anywhere else. Using "click" (which
+  // fires only once a full tap completes) rather than "pointerdown" (which
+  // fires the instant a touch begins) means starting a drag on the slider
+  // is never mistaken for an outside interaction — a drag's eventual click
+  // still targets the slider itself, so it's correctly treated as "inside."
+  document.addEventListener("click", function (e) {
     if (volOpen && !volPop.contains(e.target) && e.target !== soundBtn && !soundBtn.contains(e.target)) {
       closeVol();
     }
