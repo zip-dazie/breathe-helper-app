@@ -291,6 +291,62 @@
     letter-spacing: 0.06em;
     color: var(--ink-faint);
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .hint {
+    position: relative;
+    appearance: none;
+    width: 15px; height: 15px;
+    flex: none;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink-faint);
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .hint:hover, .hint:focus { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+  .hint:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hint-pop {
+    position: fixed;
+    left: 0; top: 0;
+    box-sizing: border-box;
+    width: min(230px, calc(100vw - 24px));
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-a) 85%, #000);
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    color: var(--ink-dim);
+    font-family: 'Instrument Sans', system-ui, sans-serif;
+    font-size: 11.5px;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+    line-height: 1.5;
+    text-align: left;
+    text-transform: none;
+    white-space: normal;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    transform: translateY(4px);
+    z-index: 900;
+  }
+  .hint-pop.show {
+    opacity: 1;
+    transform: translateY(0);
   }
   .pace output {
     font-size: 12px;
@@ -500,13 +556,17 @@
   .filter-slider-wrap {
     position: relative;
     width: var(--rail-btn);
-    height: 156px;
+    /* Must equal three timer buttons + the two 9px gaps between them so the
+       filter rail's total height matches the session rail's (cap + 4 btns +
+       gaps), keeping the filter button aligned with the 1-min button. Tracks
+       --rail-btn so it stays correct at every dynamic button size. */
+    height: calc(var(--rail-btn) * 3 + 18px);
   }
   .filter-slider {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 156px;
+    width: calc(var(--rail-btn) * 3 + 18px);
     margin: 0;
     transform: translate(-50%, -50%) rotate(90deg);
     transform-origin: center;
@@ -622,8 +682,8 @@
     .head { padding-top: 12px; gap: 10px; }
     .instruction { padding-bottom: 16px; height: calc(81px + env(safe-area-inset-bottom)); }
     .timer-rail, .filter-rail { gap: 6px; }
-    .filter-slider-wrap { height: 126px; }
-    .filter-slider { width: 126px; }
+    .filter-slider-wrap { height: calc(var(--rail-btn) * 3 + 12px); }
+    .filter-slider { width: calc(var(--rail-btn) * 3 + 12px); }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -675,7 +735,8 @@
 
   <div class="controls">
     <div class="pace" id="pace">
-      <label for="paceInput">Pace</label>
+      <label for="paceInput">Pace<button type="button" class="hint" id="paceHint" aria-label="About pace" aria-describedby="paceHintPop">?</button></label>
+      <span class="hint-pop" id="paceHintPop" role="tooltip">Pick a pace that feels natural and effortless. Slower calms more deeply; faster is easier to sustain.</span>
       <input type="range" id="paceInput" min="4" max="6" step="0.1" value="5.5" aria-label="Breath pace in seconds">
       <output id="paceOut">5.5s in / out</output>
     </div>
@@ -720,7 +781,7 @@
       accent: "#9a8ce0", accent2: "#6e63c4",
       phases: [
         { type: "inhale",    sec: 4, word: "Inhale", text: "Breathe in through your nose" },
-        { type: "hold-full", sec: 7, word: "Hold",   text: "Hold — stay full" },
+        { type: "hold-full", sec: 7, word: "Hold",   text: "Stay full, gently" },
         { type: "exhale",    sec: 8, word: "Exhale", text: "Breathe out through your mouth, with a soft whoosh" }
       ]
     },
@@ -729,9 +790,9 @@
       accent: "#6c9be8", accent2: "#4b78c8",
       phases: [
         { type: "inhale",     sec: 4, word: "Inhale", text: "Breathe in through your nose" },
-        { type: "hold-full",  sec: 4, word: "Hold",   text: "Hold — stay full" },
+        { type: "hold-full",  sec: 4, word: "Hold",   text: "Stay full, gently" },
         { type: "exhale",     sec: 4, word: "Exhale", text: "Breathe out through your nose" },
-        { type: "hold-empty", sec: 4, word: "Hold",   text: "Hold — stay empty" }
+        { type: "hold-empty", sec: 4, word: "Hold",   text: "Stay empty, at ease" }
       ]
     }
   };
@@ -851,7 +912,16 @@
   // In minimal mode the in-circle word/count are hidden, so the instruction
   // line carries everything: "Exhale: Breathe out through your mouth… (4)"
   function fmtInstr(word, text) {
-    return minimal ? word + ": " + text : text;
+    if (!minimal) return text;
+    // Guard against redundancy if a phase's instruction happens to begin with
+    // its own word (e.g. "Hold: Hold …") — strip the echoed leading word so
+    // the combined line reads cleanly.
+    var t = text.replace(new RegExp("^" + word + "\\b[\\s—:,-]*", "i"), "");
+    if (!t) return word + ".";
+    // The instruction is now a continuation after "Word:", so lowercase its
+    // first letter (unless it's an acronym / all-caps start).
+    if (!/^[A-Z]{2,}/.test(t)) t = t.charAt(0).toLowerCase() + t.slice(1);
+    return word + ": " + t;
   }
 
   function enterPhase(rest) {
@@ -1137,6 +1207,40 @@
     // If a timed session is dimming, re-anchor its ramp to the new manual
     // level so the slider isn't silently overwritten on the next frame.
     if (running && timerMin) captureSessionBase();
+  });
+
+  // Pace hint: the tooltip is a sibling (not nested in the tiny button) so it
+  // can't inherit the button's 9px font/flex context, and it's position:fixed
+  // + JS-placed + viewport-clamped so no overflow:hidden ancestor clips it.
+  var paceHint = document.getElementById("paceHint");
+  var hintPop = document.getElementById("paceHintPop");
+  function placeHint() {
+    var r = paceHint.getBoundingClientRect();
+    var pw = hintPop.offsetWidth;
+    var ph = hintPop.offsetHeight;
+    var margin = 12;
+    var left = r.left + r.width / 2 - pw / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - pw - margin));
+    var top = r.top - ph - 9;
+    if (top < margin) top = r.bottom + 9; // flip below if no room above
+    hintPop.style.left = left + "px";
+    hintPop.style.top = top + "px";
+  }
+  function showHint() { placeHint(); hintPop.classList.add("show"); }
+  function hideHint() { hintPop.classList.remove("show"); }
+  paceHint.addEventListener("mouseenter", showHint);
+  paceHint.addEventListener("mouseleave", hideHint);
+  paceHint.addEventListener("focus", showHint);
+  paceHint.addEventListener("blur", hideHint);
+  paceHint.addEventListener("click", function (e) {
+    e.stopPropagation();
+    hintPop.classList.contains("show") ? hideHint() : showHint();
+  });
+  document.addEventListener("click", function (e) {
+    if (e.target !== paceHint) hideHint();
+  });
+  window.addEventListener("resize", function () {
+    if (hintPop.classList.contains("show")) placeHint();
   });
 
   document.getElementById("filterBtn").addEventListener("click", function () {
