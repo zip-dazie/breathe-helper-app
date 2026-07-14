@@ -177,6 +177,25 @@
     transition: opacity 0.2s linear;
     pointer-events: none;
   }
+  /* Soft light halo that blooms in while long-pressing the orb — the ramp
+     matches the 550ms hold, so the glow completing doubles as the signal
+     that the toggle is about to fire. Lives inside .breather so it scales
+     and breathes with the orb. */
+  .press-halo {
+    position: absolute;
+    width: 112%;
+    height: 112%;
+    border-radius: 50%;
+    background: radial-gradient(circle,
+      transparent 58%,
+      color-mix(in srgb, #ffffff 55%, var(--accent)) 72%,
+      transparent 88%);
+    filter: blur(14px);
+    opacity: 0;
+    transition: opacity 0.55s ease;
+    pointer-events: none;
+  }
+  .center.pressing .press-halo { opacity: 0.75; }
   .orb {
     position: absolute;
     width: 100%;
@@ -222,10 +241,12 @@
        text node repaints in isolation instead of jittering the whole readout */
     transform: translateX(0.05em) translateZ(0);
     backface-visibility: hidden;
-    /* cubic-bezier approximates a sine ease-in-out: a gentle ramp up and back
-       down rather than linear's default quick-start feel, so the cross-fade
-       reads as smooth and unhurried rather than a snap */
-    transition: opacity 0.22s cubic-bezier(0.45, 0, 0.55, 1);
+    /* Material's "standard" easing: ramps in and settles out smoothly, but
+       front-loads enough motion in the first half to actually read as a
+       fade rather than a flicker at a glance (the previous fully-symmetric
+       sine curve at 220ms compressed too much of the motion into an
+       imperceptibly short middle window). */
+    transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .phase-word.fading { opacity: 0; }
   .count {
@@ -564,10 +585,32 @@
        every phase change perfectly still regardless of text length. */
     height: calc(93px + env(safe-area-inset-bottom));
     overflow: hidden;
-    transition: color 0.4s ease, opacity 0.22s cubic-bezier(0.45, 0, 0.55, 1);
+    transition: color 0.4s ease;
     z-index: 3;
   }
-  .instruction.fading { opacity: 0; }
+  /* The fading text span carries the cross-fade; the count span beside it
+     updates instantly so the per-tick number never triggers a fade. */
+  #instrText { transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+  #instrText.fading { opacity: 0; }
+  #instrCount { font-variant-numeric: tabular-nums; white-space: pre; }
+
+  /* Invisible long-press target over the orb (parents have pointer-events:
+     none for touch pass-through; this child re-enables them for itself) */
+  .orb-touch {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    pointer-events: auto;
+    z-index: 3;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Minimal mode: hide the in-circle word + count; the instruction line
+     carries "Word: text (n)" instead */
+  body.minimal .readout { display: none; }
+
+  /* Gentle restore when a session's dimming is released */
+  body.filter-slow { transition: --accent 0.9s ease, --accent2 0.9s ease, filter 2.5s ease; }
 
   @media (max-height: 620px) {
     :root {
@@ -604,11 +647,13 @@
       <div class="breather" id="breather">
         <div class="orb-glow"></div>
         <div class="orb"></div>
+        <div class="press-halo"></div>
       </div>
       <div class="readout">
         <div class="phase-word" id="word">Ready</div>
         <div class="count" id="count"></div>
       </div>
+      <div class="orb-touch" id="orbTouch" role="button" aria-label="Hold to toggle minimal display"></div>
     </div>
     <div class="filter-rail" role="group" aria-label="Display filter">
       <span class="timer-cap">filter</span>
@@ -619,8 +664,8 @@
         <input type="range" class="filter-slider" id="filterSlider" min="0" max="100" value="75" aria-label="Filter intensity" disabled>
       </div>
     </div>
-    <div class="timer-rail" role="group" aria-label="Session timer">
-      <span class="timer-cap">timer</span>
+    <div class="timer-rail" role="group" aria-label="Session length">
+      <span class="timer-cap">session</span>
       <button class="tbtn" data-min="1" aria-pressed="false">1<small>min</small></button>
       <button class="tbtn" data-min="5" aria-pressed="false">5<small>min</small></button>
       <button class="tbtn" data-min="10" aria-pressed="false">10<small>min</small></button>
@@ -658,7 +703,7 @@
     <div class="cycles" id="cycles"></div>
   </div>
 
-  <footer class="instruction" id="instruction">Get comfortable. Press start when you're ready.</footer>
+  <footer class="instruction" id="instruction"><span id="instrText">Get comfortable. Press start when you're ready.</span><span id="instrCount"></span></footer>
 
 <script>
 (function () {
@@ -700,41 +745,61 @@
   var elapsed = 0;      // seconds into current phase
   var running = false;
   var started = false;  // has a session begun (affects Resume vs Start)
+  var phaseSwapping = false; // true while waiting for the word's fade to swap text
   var cycles = 0;
   var paceSec = 5.5;
   var soundOn = false;
   var volume = 0.8;     // 0..1, adjustable via long-press / right-click on the sound button
   var timerMin = null;  // selected session length in minutes, or null for open-ended
+  var minimal = false;      // long-press on orb: word/count move into the instruction line
+  var sessionBase = 0;      // filter level when the session's dim ramp began
+  var lastFilterStr = null; // cache to avoid redundant per-frame filter writes
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var last = performance.now();
 
   // ---- Elements ----
   var breather = document.getElementById("breather");
   var wordEl = document.getElementById("word");
   var countEl = document.getElementById("count");
-  var instrEl = document.getElementById("instruction");
+  var instrEl = document.getElementById("instrText");
+  var instrCountEl = document.getElementById("instrCount");
   var patternEl = document.getElementById("pattern");
   var cyclesEl = document.getElementById("cycles");
 
   // Shared, subtle cross-fade for text swaps: opacity only, no movement.
   // Guards against overlapping calls (e.g. rapid phase changes) by clearing
   // any fade already in progress on that element before starting a new one.
+  // Accepts an optional onSwap callback that fires at the exact moment the
+  // text actually changes (mid-fade, while invisible) — used to keep the
+  // countdown number synced to the word instead of updating independently.
   var fadeTimers = new WeakMap();
-  function fadeText(el, text) {
-    if (el.textContent === text) return;
+  function fadeText(el, text, onSwap) {
+    if (el.textContent === text) { if (onSwap) onSwap(); return; }
     var pending = fadeTimers.get(el);
     if (pending) clearTimeout(pending);
+    // Minimal mode: no transitions at all. The combined instruction line
+    // ("Word: text (n)") swaps instantly and atomically — and because
+    // onSwap fires synchronously here, the count in parentheses updates
+    // in the exact same instant as the text, never a beat behind it.
+    if (minimal) {
+      el.classList.remove("fading");
+      el.textContent = text;
+      if (onSwap) onSwap();
+      return;
+    }
     el.classList.add("fading");
     var t = setTimeout(function () {
       el.textContent = text;
+      if (onSwap) onSwap();
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
           el.classList.remove("fading");
         });
       });
-    }, 220);
+    }, 200);
     fadeTimers.set(el, t);
   }
-  function setWord(text) { fadeText(wordEl, text); }
+  function setWord(text, onSwap) { fadeText(wordEl, text, onSwap); }
   function setInstruction(text) { fadeText(instrEl, text); }
   var startBtn = document.getElementById("start");
   var soundBtn = document.getElementById("sound");
@@ -783,18 +848,49 @@
     enterPhase(true);
   }
 
+  // In minimal mode the in-circle word/count are hidden, so the instruction
+  // line carries everything: "Exhale: Breathe out through your mouth… (4)"
+  function fmtInstr(word, text) {
+    return minimal ? word + ": " + text : text;
+  }
+
   function enterPhase(rest) {
     var ph = phases[idx];
     if (rest && !running) {
+      phaseSwapping = false;
       setWord("Ready");
       setCount("");
-      setInstruction(started ? "Paused. Press resume to continue." : "Get comfortable. Press start when you're ready.");
+      setInstruction(started
+        ? fmtInstr("Paused", "Press resume to continue.")
+        : fmtInstr("Ready", "Get comfortable. Press start when you're ready."));
       setScale(MIN, 0);
       return;
     }
-    setWord(ph.word);
-    setInstruction(ph.text);
+    // Suppress the frame loop's routine countdown updates until the word's
+    // fade actually swaps its text (see frame()) — otherwise the number
+    // jumps to the new phase almost instantly while the word is still
+    // fading out, and the two visibly fall out of sync.
+    phaseSwapping = true;
+    setWord(ph.word, function () {
+      phaseSwapping = false;
+      setCount(String(countFor(ph)));
+    });
+    setInstruction(fmtInstr(ph.word, ph.text));
     if (soundOn) cue(ph.type);
+  }
+
+  // Evenly-spaced countdown: instead of tying each displayed number to a real
+  // clock-second (which makes the first number of a fractional phase like 4.5s
+  // flash for only half a second before flipping), the phase is divided into
+  // ceil(sec) equal ticks. A 4.5s phase counts 5→1 with each number dwelling
+  // exactly 0.9s; a 5.5s phase counts 6→1 at ~0.92s each. Every number gets
+  // the same unhurried dwell time and the count still ends exactly with the
+  // phase. Clamped to 1 so the count never empties mid-session (.count:empty
+  // collapses the element and drops the word).
+  function countFor(ph) {
+    var ticks = Math.ceil(ph.sec);
+    var tickLen = ph.sec / ticks;
+    return Math.max(1, ticks - Math.floor(elapsed / tickLen));
   }
 
   function baseScale(type) {
@@ -805,10 +901,22 @@
     switch (ph.type) {
       case "inhale":     return MIN + (MAX - MIN) * ease(p);
       case "exhale":     return MIN + (MAX - MIN) * (1 - ease(p));
-      case "hold-full":  return MAX;
-      case "hold-empty": return MIN;
+      // Holds get an almost imperceptible slow drift (~±0.9% scale on a
+      // 3.5s wave) so the orb never reads as frozen — sustained low-grade
+      // motion is what keeps the hypnotic quality alive through a hold.
+      // The sin(pi*p) envelope zeroes the drift at both phase edges, so
+      // entering and leaving the hold is perfectly continuous.
+      case "hold-full":
+        return MAX + holdDrift(ph, p);
+      case "hold-empty":
+        return MIN + holdDrift(ph, p);
       default:           return MIN;
     }
+  }
+  function holdDrift(ph, p) {
+    if (reduceMotion) return 0;
+    var t = p * ph.sec;
+    return 0.009 * Math.sin(t * (2 * Math.PI / 3.5)) * Math.sin(Math.PI * p);
   }
 
   var lastScaleStr = null;
@@ -833,6 +941,10 @@
     if (text === lastCountStr) return;
     lastCountStr = text;
     countEl.textContent = text;
+    syncInstrCount();
+  }
+  function syncInstrCount() {
+    instrCountEl.textContent = (minimal && lastCountStr) ? " (" + lastCountStr + ")" : "";
   }
 
   function cycleLen() {
@@ -860,7 +972,7 @@
     started = false;
     setWord("Done");
     setCount("");
-    setInstruction("Session complete. Take a moment.");
+    setInstruction(fmtInstr("Done", "Session complete. Take a moment."));
     setScale(MIN, 0);
     if (soundOn) cue("complete", true);
     setStartLabel();
@@ -879,8 +991,11 @@
       var intensity = (s - MIN) / (MAX - MIN);
       setScale(s, intensity);
 
-      var remain = Math.max(0, Math.ceil(ph.sec - elapsed));
-      setCount(remain > 0 ? String(remain) : "");
+      if (!phaseSwapping) {
+        setCount(String(countFor(ph)));
+      }
+
+      applySessionDim();
 
       if (elapsed >= ph.sec) {
         idx++;
@@ -896,6 +1011,40 @@
       }
     }
     requestAnimationFrame(frame);
+  }
+
+  // ---- Session dimming ----
+  // While a timed session runs, the display filter ramps from wherever it
+  // started (sessionBase: the manual filter level if the warm filter is on,
+  // otherwise 0) up to maximum mute across the whole session — so a 20-min
+  // session dims four times slower than a 5-min one, and starting already
+  // half-muted means only the remaining half is traversed.
+  function sessionProgress() {
+    var tgt = targetCycles();
+    if (!tgt) return 0;
+    var done = 0;
+    for (var i = 0; i < idx; i++) done += phases[i].sec;
+    var cycProg = (done + elapsed) / cycleLen();
+    return Math.min(1, (cycles + cycProg) / tgt);
+  }
+  function applySessionDim() {
+    if (!timerMin) return;
+    var level = sessionBase + (1 - sessionBase) * sessionProgress();
+    var f = computeFilter(level);
+    if (f !== lastFilterStr) {
+      lastFilterStr = f;
+      document.body.style.filter = f;
+    }
+  }
+  function captureSessionBase() {
+    sessionBase = warmOn ? filterLevel : 0;
+  }
+  function releaseSessionDim() {
+    // Ease gently back to the user's own filter state
+    lastFilterStr = null;
+    document.body.classList.add("filter-slow");
+    applyFilter();
+    setTimeout(function () { document.body.classList.remove("filter-slow"); }, 2600);
   }
 
   // ---- Sound cues (gentle, optional) ----
@@ -936,7 +1085,11 @@
   startBtn.addEventListener("click", function () {
     running = !running;
     if (running) {
-      if (!started) { idx = 0; elapsed = 0; cycles = 0; updateCycles(); }
+      if (!started) {
+        idx = 0; elapsed = 0; cycles = 0; updateCycles();
+        captureSessionBase();
+        if (!timerMin) releaseSessionDim(); // clear leftover dim from a finished session
+      }
       started = true;
       last = performance.now();
       enterPhase(false);
@@ -944,7 +1097,7 @@
       // Freeze the orb where it is; only update the text.
       setWord("Paused");
       setCount("");
-      setInstruction("Paused. Press resume to continue.");
+      setInstruction(fmtInstr("Paused", "Press resume to continue."));
     }
     setStartLabel();
   });
@@ -954,6 +1107,7 @@
       running = false;
       started = false;
       setStartLabel();
+      releaseSessionDim();
       applyTechnique(b.dataset.key);
     });
   });
@@ -980,6 +1134,9 @@
     filterLevel = parseInt(this.value, 10) / 100;
     this.style.setProperty("--fill", this.value + "%");
     applyFilter();
+    // If a timed session is dimming, re-anchor its ramp to the new manual
+    // level so the slider isn't silently overwritten on the next frame.
+    if (running && timerMin) captureSessionBase();
   });
 
   document.getElementById("filterBtn").addEventListener("click", function () {
@@ -998,12 +1155,15 @@
     updateCycles();
     if (running) {
       // Keep breathing, but start the count over from the first inhale.
+      // The dim ramp restarts with it (progress returns to 0).
+      captureSessionBase();
       last = performance.now();
       enterPhase(false);
     } else {
       // Return to a clean pre-start state.
       started = false;
       setStartLabel();
+      releaseSessionDim();
       enterPhase(true);
     }
   });
@@ -1028,8 +1188,60 @@
         x.setAttribute("aria-pressed", String(parseInt(x.dataset.min, 10) === timerMin));
       });
       updateCycles();
+      if (timerMin) {
+        captureSessionBase();
+      } else {
+        releaseSessionDim();
+      }
     });
   });
+
+  // ---- Minimal mode: long-press the orb to move word/count down into the
+  // instruction line ("Exhale: Breathe out through your mouth… (4)") ----
+  function refreshMinimalText() {
+    document.body.classList.toggle("minimal", minimal);
+    syncInstrCount();
+    if (running) {
+      var ph = phases[idx];
+      setInstruction(fmtInstr(ph.word, ph.text));
+    } else if (started) {
+      setInstruction(fmtInstr("Paused", "Press resume to continue."));
+    } else {
+      setInstruction(fmtInstr("Ready", "Get comfortable. Press start when you're ready."));
+    }
+  }
+
+  var orbTouch = document.getElementById("orbTouch");
+  var orbPressTimer = null;
+  var orbPressStart = null;
+  var orbCenter = document.querySelector(".center");
+  function endOrbPress() {
+    clearTimeout(orbPressTimer);
+    orbPressStart = null;
+    orbCenter.classList.remove("pressing");
+  }
+  orbTouch.addEventListener("pointerdown", function (e) {
+    if (e.button && e.button !== 0) return;
+    orbPressStart = { x: e.clientX, y: e.clientY };
+    clearTimeout(orbPressTimer);
+    orbCenter.classList.add("pressing");
+    orbPressTimer = setTimeout(function () {
+      minimal = !minimal;
+      refreshMinimalText();
+      // Toggle fired: let the halo dissolve to signal completion
+      orbCenter.classList.remove("pressing");
+    }, 550);
+  });
+  orbTouch.addEventListener("pointermove", function (e) {
+    if (!orbPressStart) return;
+    if (Math.abs(e.clientX - orbPressStart.x) > 12 || Math.abs(e.clientY - orbPressStart.y) > 12) {
+      endOrbPress();
+    }
+  });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(function (evt) {
+    orbTouch.addEventListener(evt, endOrbPress);
+  });
+  orbTouch.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
   // ---- Sound toggle + volume popup ----
   function toggleSound() {
