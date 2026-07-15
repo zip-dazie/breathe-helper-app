@@ -1098,36 +1098,68 @@
     return Math.min(1, (cycles + cycProg) / tgt);
   }
   function applySessionDim() {
-    if (!timerMin) return;
+    if (!timerMin || !sessionDimActive) return;
     var level = sessionBase + (1 - sessionBase) * sessionProgress();
-    var f = computeFilter(level);
-    if (f !== lastFilterStr) {
-      lastFilterStr = f;
-      document.body.style.filter = f;
-    }
+    // Drive the toggle + slider so they always match the applied filter.
+    syncFilterUI(level, true);
+    applyFilter();
   }
   function captureSessionBase() {
-    sessionBase = warmOn ? filterLevel : 0;
+    // Start the ramp from wherever the slider currently sits — not from zero —
+    // so selecting/starting a session never yanks the slider to a new position.
+    // It simply begins easing from its current level toward full mute.
+    sessionBase = filterLevel;
+    sessionDimActive = true;
   }
   function releaseSessionDim() {
-    // Ease gently back to the user's own filter state
-    lastFilterStr = null;
+    // Ease gently back to the person's own manual filter preference
+    sessionDimActive = false;
     document.body.classList.add("filter-slow");
+    syncFilterUI(userLevel, userWarmOn);
     applyFilter();
     setTimeout(function () { document.body.classList.remove("filter-slow"); }, 2600);
   }
 
   // ---- Sound cues (gentle, optional) ----
   var actx = null;
-  function ensureAudio() {
-    if (!actx) {
-      try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
-      catch (e) { actx = null; }
+  function createAudio() {
+    try {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+      actx = null;
     }
-    if (actx && actx.state === "suspended") actx.resume();
+  }
+  // Returns a context that is actually running, recreating it if the previous
+  // one died while backgrounded. iOS in particular can leave a context in a
+  // suspended/interrupted state that resume() will never recover — the only
+  // cure is to build a fresh one. Must be called from a user gesture the
+  // first time (autoplay policy).
+  function ensureAudio() {
+    if (!actx) createAudio();
+    if (!actx) return;
+    // "interrupted" is a WebKit-only state (phone call, backgrounding, etc.)
+    if (actx.state === "closed" || actx.state === "interrupted") {
+      createAudio();
+      if (!actx) return;
+    }
+    if (actx.state === "suspended") {
+      var p = actx.resume();
+      if (p && p.catch) {
+        p.catch(function () {
+          // resume() rejected — the context is unrecoverable, so rebuild it
+          // and try once more. Safe to call: a fresh context starts running
+          // when created inside a user gesture.
+          createAudio();
+          if (actx && actx.state === "suspended" && actx.resume) actx.resume();
+        });
+      }
+    }
   }
   function cue(type, long) {
     if (!actx || volume <= 0) return;
+    // A context that isn't running would silently swallow the note; try to
+    // revive it rather than scheduling into the void.
+    if (actx.state !== "running") { ensureAudio(); if (!actx || actx.state !== "running") return; }
     var freq = 440;
     if (type === "inhale") freq = 528;
     else if (type === "exhale") freq = 396;
@@ -1182,10 +1214,20 @@
     });
   });
 
-  // ---- Warm filter: button toggles on/off, fader sets intensity ----
+  // ---- Warm filter ----
+  // warmOn / filterLevel are the LIVE state: they always describe the filter
+  // currently painted on screen, so the button and slider are a truthful
+  // readout of it (a session's dim ramp drives them just like a manual drag).
+  // userWarmOn / userLevel remember the person's own manual preference, so a
+  // session's automated dimming can be released back to it afterwards.
   var warmOn = false;
   var filterLevel = 0.75;   // 0 = none (top), 0.75 = default look, 1 = most muted (bottom)
+  var userWarmOn = false;
+  var userLevel = 0.75;
+  var sessionDimActive = false; // false if the person turned the filter off mid-session
+  var lastSliderPct = null;
   var filterSlider = document.getElementById("filterSlider");
+  var filterBtn = document.getElementById("filterBtn");
 
   function computeFilter(t) {
     // interpolate from identity (t=0) through the original look (t=0.75)
@@ -1195,18 +1237,39 @@
     var c = (1 - 0.06667 * t).toFixed(4);
     return "brightness(" + b + ") saturate(" + s + ") sepia(" + se + ") contrast(" + c + ")";
   }
+  // Single source of truth: set the live filter state and mirror it into the
+  // toggle + slider so the controls always match what's on screen.
+  function syncFilterUI(level, on) {
+    warmOn = on;
+    filterLevel = level;
+    filterBtn.setAttribute("aria-pressed", String(on));
+    filterSlider.disabled = !on;
+    var pct = Math.round(level * 100);
+    if (pct !== lastSliderPct) {
+      lastSliderPct = pct;
+      filterSlider.value = pct;
+      filterSlider.style.setProperty("--fill", pct + "%");
+    }
+  }
   function applyFilter() {
-    document.body.style.filter = warmOn ? computeFilter(filterLevel) : "";
+    var f = warmOn ? computeFilter(filterLevel) : "";
+    if (f !== lastFilterStr) {
+      lastFilterStr = f;
+      document.body.style.filter = f;
+    }
+    var tm = document.querySelector('meta[name="theme-color"]');
+    if (tm) tm.setAttribute("content", warmOn ? "#12120d" : "#0c1a20");
   }
 
-  filterSlider.style.setProperty("--fill", filterSlider.value + "%");
+  syncFilterUI(filterLevel, warmOn);
   filterSlider.addEventListener("input", function () {
-    filterLevel = parseInt(this.value, 10) / 100;
-    this.style.setProperty("--fill", this.value + "%");
+    userLevel = parseInt(this.value, 10) / 100;
+    userWarmOn = true;
+    syncFilterUI(userLevel, true);
     applyFilter();
     // If a timed session is dimming, re-anchor its ramp to the new manual
     // level so the slider isn't silently overwritten on the next frame.
-    if (running && timerMin) captureSessionBase();
+    if (running && timerMin && sessionDimActive) captureSessionBase();
   });
 
   // Pace hint: the tooltip is a sibling (not nested in the tiny button) so it
@@ -1243,13 +1306,20 @@
     if (hintPop.classList.contains("show")) placeHint();
   });
 
-  document.getElementById("filterBtn").addEventListener("click", function () {
-    warmOn = !warmOn;
-    this.setAttribute("aria-pressed", String(warmOn));
-    filterSlider.disabled = !warmOn;
-    var tm = document.querySelector('meta[name="theme-color"]');
-    if (tm) tm.setAttribute("content", warmOn ? "#12120d" : "#0c1a20");
-    applyFilter();
+  filterBtn.addEventListener("click", function () {
+    userWarmOn = !userWarmOn;
+    if (userWarmOn) {
+      syncFilterUI(userLevel, true);
+      applyFilter();
+      // Re-enable a session's ramp from the current level if one is running
+      if (running && timerMin) captureSessionBase();
+    } else {
+      // Turning the filter off wins over a session's automated dimming:
+      // pause the ramp rather than fighting it every frame.
+      sessionDimActive = false;
+      syncFilterUI(userLevel, false);
+      applyFilter();
+    }
   });
 
   document.getElementById("reset").addEventListener("click", function () {
@@ -1293,7 +1363,14 @@
       });
       updateCycles();
       if (timerMin) {
-        captureSessionBase();
+        // Only anchor the ramp's starting level if a dim isn't already in
+        // progress. Re-anchoring on every switch would take the current
+        // (already-dimmed) level as the new floor and ramp further from it —
+        // ratcheting the slider upward with each change. Keeping the original
+        // base means switching length just recomputes progress against the
+        // new target, which can correctly move the level down (a longer
+        // session means you're less far along).
+        if (!(running && sessionDimActive)) captureSessionBase();
       } else {
         releaseSessionDim();
       }
@@ -1354,6 +1431,26 @@
     sndLabel.textContent = soundOn ? "On" : "Off";
     if (soundOn) { ensureAudio(); cue("inhale"); }
   }
+
+  // ---- Audio lifecycle ----
+  // Mobile browsers suspend (or on iOS, "interrupt") the AudioContext when the
+  // app is backgrounded, and it does not always come back on its own. Revive it
+  // as soon as we're visible again, and also on the next user gesture — some
+  // platforms will only allow a resume from inside a real interaction.
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && soundOn) ensureAudio();
+  });
+  window.addEventListener("pageshow", function () {
+    if (soundOn) ensureAudio();
+  });
+  window.addEventListener("focus", function () {
+    if (soundOn) ensureAudio();
+  });
+  ["pointerdown", "touchstart", "keydown"].forEach(function (evt) {
+    document.addEventListener(evt, function () {
+      if (soundOn) ensureAudio();
+    }, { passive: true, capture: true });
+  });
 
   var volPop = document.getElementById("volPop");
   var volSlider = document.getElementById("volSlider");
